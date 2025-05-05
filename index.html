@@ -1,0 +1,191 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>深海加密器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap');
+        body {
+            font-family: 'Noto Serif SC', serif;
+        }
+        .container {
+            animation: fadeIn 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @keyframes fadeIn {
+            0% { opacity: 0; transform: translateY(30px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        .glow {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+        }
+        button {
+            transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55), background 0.3s ease-in-out;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        textarea {
+            transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55), box-shadow 0.3s ease-in-out;
+        }
+        textarea:focus {
+            transform: scale(1.02);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.8);
+        }
+        .output-animate {
+            animation: contentFade 0.5s ease-in-out;
+        }
+        @keyframes contentFade {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-950 via-blue-800 to-teal-700 min-h-screen flex items-center justify-center text-white">
+    <div class="container bg-white bg-opacity-15 backdrop-blur-xl rounded-3xl p-10 max-w-lg w-full shadow-2xl glow">
+        <h1 class="text-4xl font-bold text-center mb-8 bg-clip-text text-transparent bg-gradient-to-r from-blue-300 to-teal-300">深海加密器</h1>
+        <div class="space-y-6 mb-6">
+            <label class="block text-sm font-medium text-blue-100">输入短信</label>
+            <textarea id="inputText" class="w-full p-4 rounded-2xl bg-white bg-opacity-10 text-white placeholder-blue-200 focus:outline-none focus:ring-4 focus:ring-blue-400" rows="5" placeholder="请输入要加密的短信"></textarea>
+        </div>
+        <div class="flex space-x-6 mb-6">
+            <button onclick="encrypt()" class="flex-1 bg-gradient-to-r from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500 text-white font-bold py-3 px-6 rounded-2xl glow">加密</button>
+            <button onclick="decrypt()" class="flex-1 bg-gradient-to-r from-teal-600 to-teal-400 hover:from-teal-700 hover:to-teal-500 text-white font-bold py-3 px-6 rounded-2xl glow">解密</button>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-blue-100 mb-2">结果</label>
+            <textarea id="outputText" class="w-full p-4 rounded-2xl bg-white bg-opacity-10 text-white output-animate" rows="5" readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        const charMap = ['s', 'h', 'e', 'n', 'a', 'i', '深', '海'];
+
+        // 安全的Base64编码，处理非Latin1字符
+        function safeBtoa(str) {
+            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, 
+                (match, p1) => String.fromCharCode('0x' + p1)));
+        }
+
+        // 安全的Base64解码
+        function safeAtob(b64) {
+            return decodeURIComponent(atob(b64).split('')
+                .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join(''));
+        }
+
+        function encrypt() {
+            const inputText = document.getElementById('inputText').value;
+            const outputText = document.getElementById('outputText');
+
+            if (inputText) {
+                // 加密：每个字符的Unicode值对8取模，映射到charMap
+                const chars = inputText.split('');
+                const encryptedSequence = chars
+                    .map(char => charMap[char.charCodeAt(0) % 8])
+                    .join('');
+                // 存储原始文本以便解密（使用安全的Base64编码）
+                const encodedData = safeBtoa(inputText);
+                // 组合加密结果：映射序列 + 分隔符 + 编码数据
+                const fullOutput = encryptedSequence + '|' + encodedData;
+                // 界面仅显示映射序列
+                outputText.value = encryptedSequence;
+                // 存储完整数据在隐藏属性中
+                outputText.dataset.encrypted = fullOutput;
+                // 触发内容更新动画
+                outputText.classList.remove('output-animate');
+                void outputText.offsetWidth; // 强制重绘
+                outputText.classList.add('output-animate');
+            } else {
+                outputText.value = '请输入短信';
+                outputText.dataset.encrypted = '';
+                outputText.classList.remove('output-animate');
+                void outputText.offsetWidth;
+                outputText.classList.add('output-animate');
+            }
+        }
+
+        function decrypt() {
+            const inputText = document.getElementById('inputText').value;
+            const outputText = document.getElementById('outputText');
+
+            if (inputText) {
+                // 验证输入是否只包含“s”、“h”、“e”、“n”、“a”、“i”、“深”、“海”
+                const validPattern = /^[shenai\u6df1\u6d77]*$/;
+                if (validPattern.test(inputText)) {
+                    // 检查是否有存储的加密数据
+                    const fullOutput = outputText.dataset.encrypted || '';
+                    if (fullOutput) {
+                        const [sequence, encodedData] = fullOutput.split('|');
+                        // 验证输入的序列是否匹配
+                        if (sequence === inputText) {
+                            // 解密：从编码数据中恢复原文
+                            try {
+                                const decrypted = safeAtob(encodedData);
+                                outputText.value = decrypted;
+                            } catch (e) {
+                                outputText.value = '解密失败：数据格式错误';
+                            }
+                        } else {
+                            outputText.value = '输入的序列与加密结果不匹配';
+                        }
+                    } else {
+                        outputText.value = '无匹配的加密数据，请先加密';
+                    }
+                } else {
+                    outputText.value = '输入只能包含“s”、“h”、“e”、“n”、“a”、“i”、“深”或“海”';
+                }
+                // 触发内容更新动画
+                outputText.classList.remove('output-animate');
+                void outputText.offsetWidth;
+                outputText.classList.add('output-animate');
+            } else {
+                outputText.value = '请输入短信';
+                outputText.classList.remove('output-animate');
+                void outputText.offsetWidth;
+                outputText.classList.add('output-animate');
+            }
+        }
+    </script>
+</body>
+</html>
